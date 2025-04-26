@@ -184,6 +184,29 @@ def realizar_venta(symbol, price, buy_price):
     except Exception as e:
         print(f"Error al realizar la venta: {str(e)}")
 
+def analyze_pairs(pairs):
+    found_signal = False
+    for pair in pairs:
+        print(f"Analizando {pair}...")
+        df = get_historical_data(pair, "1h", 100)
+        if df is not None and not df.empty:
+            df = calculate_indicators(df)
+            if make_trading_decision(df):
+                print(f"📈 Señal de entrada detectada en {pair}.")
+                user_input = input(f"¿Deseas operar en {pair}? (s/n): ")
+                if user_input.lower() == "s":
+                    amount = float(input("Introduce el monto para operar (mínimo $5): "))
+                    if amount >= 5:
+                        buy_price = realizar_compra(pair, amount)
+                        if buy_price:
+                            print(f"Compra realizada en {pair} a {buy_price:.2f}. Iniciando monitorización del mercado...")
+                            stop_loss = buy_price * (1 - INITIAL_STOP_LOSS_PERCENTAGE)
+                            monitor_market(pair, buy_price, stop_loss)
+                    else:
+                        print("El monto debe ser mayor o igual a $5.")
+                found_signal = True
+    return found_signal
+
 if __name__ == "__main__":
     print("¡El bot está listo para operar! 🚀")
     list_account_balances()
