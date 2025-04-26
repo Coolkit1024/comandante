@@ -78,6 +78,19 @@ def adjust_stop_loss(current_price, stop_loss, fib_levels):
             stop_loss = level
     return stop_loss
 
+def list_account_balances():
+    try:
+        account_info = client.get_account()
+        balances = account_info["balances"]
+        print("Activos disponibles en tu cuenta de Binance:")
+        for balance in balances:
+            asset = balance["asset"]
+            free = float(balance["free"])
+            if free > 0:
+                print(f"{asset}: {free}")
+    except Exception as e:
+        print(f"Error al obtener los balances de la cuenta: {str(e)}")
+
 def find_volatile_pairs(excluded_pairs):
     try:
         tickers = client.get_ticker()
@@ -118,36 +131,56 @@ def monitor_market(pair, initial_price, stop_loss):
     """
     interval = 10  # Intervalo inicial de 10 segundos
     while True:
-        time.sleep(interval)
-        df = get_historical_data(pair, "1m", 50)  # Verificar en intervalos de 1 minuto
-        if df is not None and not df.empty:
-            current_price = df["close"].iloc[-1]
-            fib_levels = [initial_price * factor for factor in [0.618, 0.5, 0.382]]  # Niveles Fibonacci
-            stop_loss = adjust_stop_loss(current_price, stop_loss, fib_levels)
-            print(f"Precio actual: {current_price:.2f}, Stop Loss ajustado: {stop_loss:.2f}")
+        try:
+            time.sleep(interval)
+            df = get_historical_data(pair, "1m", 50)  # Verificar en intervalos de 1 minuto
+            if df is not None and not df.empty:
+                current_price = df["close"].iloc[-1]
+                fib_levels = [initial_price * factor for factor in [0.618, 0.5, 0.382]]  # Niveles Fibonacci
+                stop_loss = adjust_stop_loss(current_price, stop_loss, fib_levels)
+                print(f"Precio actual: {current_price:.2f}, Stop Loss ajustado: {stop_loss:.2f}")
 
-            # Logica para salir si el precio cae por debajo del Stop Loss
-            if current_price < stop_loss:
-                print(f"⚠️ Precio cayó por debajo del Stop Loss ({stop_loss:.2f}). Vendiendo...")
-                realizar_venta(pair, current_price)
-                break
+                # Logica para salir si el precio cae por debajo del Stop Loss
+                if current_price < stop_loss:
+                    print(f"⚠️ Precio cayó por debajo del Stop Loss ({stop_loss:.2f}). Vendiendo...")
+                    realizar_venta(pair, current_price, initial_price)
+                    break
 
-            # Ajustar el intervalo según la volatilidad
-            volatility = abs((df["high"].iloc[-1] - df["low"].iloc[-1]) / df["low"].iloc[-1])
-            interval = 5 if volatility > 0.05 else 15
+                # Ajustar el intervalo según la volatilidad
+                volatility = abs((df["high"].iloc[-1] - df["low"].iloc[-1]) / df["low"].iloc[-1])
+                if volatility > 0.05:
+                    interval = 5
+                    print("⚡ Mercado volátil: Ajustando intervalo a 5 segundos.")
+                else:
+                    interval = 15
+                    print("🌊 Mercado estable: Ajustando intervalo a 15 segundos.")
+        except Exception as e:
+            print(f"Error al monitorear el mercado: {str(e)}")
+            break
 
 def realizar_compra(symbol, amount):
     try:
         order = client.order_market_buy(symbol=symbol, quoteOrderQty=amount)
         print(f"🛒 Orden de COMPRA ejecutada: {order}")
-        return float(order["fills"][0]["price"])  # Retorna el precio de compra
+        if "fills" in order and len(order["fills"]) > 0:
+            return float(order["fills"][0]["price"])  # Retorna el precio de compra
+        else:
+            print("Orden ejecutada, pero no se pudo obtener el precio de compra.")
+            return None
     except Exception as e:
         print(f"Error al realizar la compra: {str(e)}")
         return None
 
-def realizar_venta(symbol, price):
+def realizar_venta(symbol, price, buy_price):
     try:
-        print(f"🛒 Orden de VENTA ejecutada al precio: {price:.2f}")
+        # Calcular ganancia neta
+        fee = BINANCE_FEE_PERCENTAGE
+        net_profit = (price - buy_price) / buy_price - 2 * fee
+
+        if net_profit >= MINIMUM_PROFIT_PERCENTAGE:
+            print(f"🛒 Orden de VENTA ejecutada al precio: {price:.2f} con ganancia neta: {net_profit:.2%}")
+        else:
+            print(f"⚠️ Ganancia insuficiente ({net_profit:.2%}). No se ejecuta la venta.")
     except Exception as e:
         print(f"Error al realizar la venta: {str(e)}")
 
