@@ -191,6 +191,20 @@ def monitor_market(pair, initial_price, stop_loss):
             break
 
 
+def analyze_pairs(pairs):
+    found_signal = False
+    for pair in pairs:
+        print(f"Analizando {pair}...")
+        df = get_historical_data(pair, "1h", 100)
+        if df is not None and not df.empty:
+            df = calculate_indicators(df)
+            if make_trading_decision(df):
+                print(f"📈 Señal de entrada detectada en {pair}.")
+                found_signal = True
+                break
+    return found_signal
+
+
 if __name__ == "__main__":
     print("¡El bot está listo para operar! 🚀")
     list_account_balances()
@@ -198,3 +212,15 @@ if __name__ == "__main__":
     # Comprobar órdenes activas al iniciar
     if not detect_and_manage_active_orders():
         print("No hay órdenes activas. El bot iniciará su flujo normal.")
+        while True:
+            print("\nAnalizando lista por defecto...")
+            if not analyze_pairs(DEFAULT_PAIRS):
+                print("No se detectaron señales en la lista por defecto. Generando lista dinámica...")
+                dynamic_pairs = find_volatile_pairs(DEFAULT_PAIRS)
+                if dynamic_pairs:
+                    print(f"Pares dinámicos seleccionados: {', '.join(dynamic_pairs)}")
+                    if not analyze_pairs(dynamic_pairs):
+                        print("No se detectaron señales en la lista dinámica.")
+                else:
+                    print("No se encontraron pares dinámicos.")
+            time.sleep(15)
